@@ -11,6 +11,7 @@ Usage
 To build on Windows or \*nix systems:
 
 ```bash
+wget -O lodepng.c https://raw.githubusercontent.com/lvandeve/lodepng/master/lodepng.cpp
 cc slzee2.c lodepng.c -o slzee
 ```
 
