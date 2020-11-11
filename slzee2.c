@@ -18,7 +18,7 @@ struct box_size {
 struct primitive {
 	enum primitive_type {
 		TRANSLATE, // Δx if pop, Δy if pop, pop?
-		GLYPH, // x, y, glyph index, , color
+		GLYPH, // x, y, glyph index, lower (1) - upper (2) - both (3), color
 		LINE, // x, y, Δx, Δy, color
 		ELLIPSE, // x center, y center, a, b, color
 		// y ↑+
@@ -37,6 +37,10 @@ struct glyph {
 	uint8_t bitmap[20];
 	struct box_size size;
 	int italic_correction;
+	int delimiter_lower_x;
+	int delimiter_lower_y;
+	int delimiter_upper_x;
+	int delimiter_upper_y;
 } glyphs[4096];
 
 void load_glyphs() {
@@ -54,6 +58,10 @@ void load_glyphs() {
 			glyph->size.height = 0;
 			glyph->size.depth = INT_MIN;
 			glyph->italic_correction = INT_MIN;
+			glyph->delimiter_lower_x = INT_MIN;
+			glyph->delimiter_lower_y = INT_MIN;
+			glyph->delimiter_upper_x = INT_MIN;
+			glyph->delimiter_upper_y = INT_MIN;
 			for (size_t y = 0; y < 20; y++) {
 				glyph->bitmap[y] = 0;
 				for (size_t x = 0; x < 8; x++) {
@@ -72,6 +80,15 @@ void load_glyphs() {
 					}
 					if (pixel[1] >= 128) {
 						glyph->bitmap[y] |= 1 << x;
+					}
+					if (pixel[0] == 255) {
+						if (y < 20 / 2) {
+							glyph->delimiter_lower_x = x;
+							glyph->delimiter_lower_y = y - 20 / 2;
+						} else {
+							glyph->delimiter_upper_x = x;
+							glyph->delimiter_upper_y = y - 20 / 2;
+						}
 					}
 				}
 			}
@@ -144,8 +161,8 @@ size_t measure(size_t pstk_index) {
 		pstk_index = j;
 	} else if (pstk[pstk_index].type == GLYPH) {
 		width = glyphs[pstk[pstk_index].param[2]].size.width;
-		height = glyphs[pstk[pstk_index].param[2]].size.height;
-		depth = glyphs[pstk[pstk_index].param[2]].size.depth;
+		if (pstk[pstk_index].param[3] & 2) height = glyphs[pstk[pstk_index].param[2]].size.height;
+		if (pstk[pstk_index].param[3] & 1) depth = glyphs[pstk[pstk_index].param[2]].size.depth;
 	} else if (pstk[pstk_index].type == LINE) {
 		width = pstk[pstk_index].param[2];
 		if (width < 0) width = 0;
@@ -196,7 +213,9 @@ void apply_translation(size_t pstk_index) {
 signed char vram[546][512];
 void draw(struct primitive *p) {
 	if (p->type == GLYPH) {
-		for (size_t y = 0; y < 20; y++) {
+		size_t y0 = p->param[3] & 1 ? 0 : 20 / 2;
+		size_t y1 = p->param[3] & 2 ? 20 : 20 / 2;
+		for (size_t y = y0; y < y1; y++) {
 			for (size_t x = 0; x < 8; x++) {
 				if (glyphs[p->param[2]].bitmap[y] & (1 << x)) {
 					vram[p->param[1] + y - 10][p->param[0] + x] = p->param[4];
@@ -298,6 +317,41 @@ void pstk_add_box(int x, int y, int dx, int dy, int color) {
 	pstk_count++;
 }
 
+void pstk_add_delimiter(int x, int y, int dy, int glyph, int color) {
+	pstk_push_translation();
+	pstk[pstk_count].type = GLYPH;
+	pstk[pstk_count].param[0] = 0;
+	pstk[pstk_count].param[1] = glyphs[glyph].size.depth;
+	pstk[pstk_count].param[2] = glyph;
+	pstk[pstk_count].param[3] = 1;
+	pstk[pstk_count].param[4] = color;
+	pstk_count++;
+	pstk[pstk_count].type = GLYPH;
+	pstk[pstk_count].param[0] = 0;
+	pstk[pstk_count].param[1] = dy - glyphs[glyph].size.height;
+	pstk[pstk_count].param[2] = glyph;
+	pstk[pstk_count].param[3] = 2;
+	pstk[pstk_count].param[4] = color;
+	pstk_count++;
+	if (glyphs[glyph].delimiter_lower_x != INT_MIN && glyphs[glyph].delimiter_upper_x != INT_MIN) {
+		pstk[pstk_count].type = LINE;
+		pstk[pstk_count].param[0] = glyphs[glyph].delimiter_lower_x;
+		pstk[pstk_count].param[1] = pstk[pstk_count - 2].param[1] + glyphs[glyph].delimiter_lower_y;
+		pstk[pstk_count].param[2] = glyphs[glyph].delimiter_upper_x - pstk[pstk_count].param[0];
+		pstk[pstk_count].param[3] = pstk[pstk_count - 1].param[1] + glyphs[glyph].delimiter_upper_y - pstk[pstk_count].param[1];
+		pstk[pstk_count].param[4] = color;
+		pstk_count++;
+	}
+	pstk_pop_translation();
+	pstk[pstk_count - 1].param[0] = x;
+	pstk[pstk_count - 1].param[1] = y;
+}
+
+void pstk_add_piecewise_delimiter(int x, int y, int dy, int glyph_upper, int glyph_lower, int color) {
+	pstk_add_delimiter(x, y, (dy + 1) / 2, glyph_lower, color);
+	pstk_add_delimiter(x, y + (dy + 1) / 2, dy / 2, glyph_upper, color);
+}
+
 void input(int glyph_base, int color) {
 	bool more_lines = false;
 	size_t line = pstk_count;
@@ -324,6 +378,7 @@ void input(int glyph_base, int color) {
 			pstk[pstk_count].param[0] = x;
 			pstk[pstk_count].param[1] = 0;
 			pstk[pstk_count].param[2] = glyph_base + glyph;
+			pstk[pstk_count].param[3] = 3;
 			pstk[pstk_count].param[4] = color;
 			pstk_count++;
 			x += glyphs[glyph].size.width + 1;
@@ -397,15 +452,64 @@ void input(int glyph_base, int color) {
 			pstk[pstk_count - 1].param[1] = 0;
 			pstk_add_box(x, -pstk_sizes[translation].size.depth - 2, pstk_sizes[translation].size.width + 3, pstk_sizes[translation].size.height + pstk_sizes[translation].size.depth + 3, color);
 			x += pstk_sizes[translation].size.width + 5;
+		} else if (op == 'B') {
+			struct {
+				size_t translation;
+				bool ending_delimiter_piecewise;
+				int ending_delimiter_glyph_upper;
+				int ending_delimiter_glyph_lower;
+				int ending_delimiter_x;
+			} parts[8];
+			size_t part_count;
+			{
+				int part_count_;
+				scanf("%d", &part_count_);
+				if (part_count_ < 0) part_count_ = 0;
+				part_count = part_count_;
+			}
+			part_count += 2;
+			for (size_t i = 0; i < part_count; i++) {
+				scanf("%d%d", &parts[i].ending_delimiter_glyph_upper, &parts[i].ending_delimiter_glyph_lower);
+				parts[i].ending_delimiter_piecewise = parts[i].ending_delimiter_glyph_lower >= 0;
+			}
+			int max_height = 0;
+			int max_depth = 0;
+			parts[0].translation = SIZE_MAX;
+			parts[0].ending_delimiter_x = x;
+			x += glyphs[parts[0].ending_delimiter_glyph_upper].size.width + 1;
+			for (size_t i = 1; i < part_count; i++) {
+				parts[i].translation = pstk_count;
+				pstk_push_translation();
+				input(glyph_base, color);
+				pstk_pop_translation();
+				measure(parts[i].translation);
+				if (pstk_sizes[pstk_count - 1].size.height > max_height) max_height = pstk_sizes[pstk_count - 1].size.height;
+				if (pstk_sizes[pstk_count - 1].size.depth > max_depth) max_depth = pstk_sizes[pstk_count - 1].size.depth;
+				pstk[pstk_count - 1].param[0] = x;
+				pstk[pstk_count - 1].param[1] = 0;
+				x += pstk_sizes[pstk_count - 1].size.width + 1;
+				parts[i].ending_delimiter_x = x;
+				x += glyphs[parts[i].ending_delimiter_glyph_upper].size.width + 1;
+				parts[i].translation = pstk_count - 1;
+			}
+			max_height++;
+			max_depth++;
+			for (size_t i = 0; i < part_count; i++) {
+				if (parts[i].ending_delimiter_piecewise) {
+					pstk_add_piecewise_delimiter(parts[i].ending_delimiter_x, -max_depth, max_height + max_depth, parts[i].ending_delimiter_glyph_upper, parts[i].ending_delimiter_glyph_lower, color);
+				} else {
+					pstk_add_delimiter(parts[i].ending_delimiter_x, -max_depth, max_height + max_depth, parts[i].ending_delimiter_glyph_upper, color);
+				}
+			}
 		} else if (op < 0x80 && !isspace(op)) {
 			exit(3);
 		}
 	}
 	pstk_pop_translation();
-	if (line && (pstk[line - 1].type == TRANSLATE && pstk[line - 1].param[2])) {
+	for (int dy = line ? pstk_sizes[line - 1].size.depth + pstk_sizes[line].size.height + 3 : INT_MIN; line && (pstk[line - 1].type == TRANSLATE && pstk[line - 1].param[2]); line = pstk_match(line - 1)) {
 		measure(line - 1);
 		measure(line);
-		pstk[line - 1].param[1] += pstk_sizes[line - 1].size.depth + pstk_sizes[line].size.height + 1;
+		pstk[line - 1].param[1] += dy;
 	}
 	if (more_lines) input(glyph_base, color);
 }
@@ -481,7 +585,7 @@ int main(int argc, char *argv[]) {
 	if (error) {
 		printf("LodePNG error %u: %s\n", error, lodepng_error_text(error));
 	} else {
-		lodepng_save_file(png, pngsize, "tenshitaux-output.png");
+		lodepng_save_file(png, pngsize, argc >= 2 ? argv[1] : "slzee2-output.png");
 	}
 
 	lodepng_state_cleanup(&state);

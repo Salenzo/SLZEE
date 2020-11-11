@@ -20,20 +20,22 @@ SLZEE 2 reads the equation to be typeset from the standard input only.
 ### Syntax ###
 
 ◊ ⟨mandatory⟩
+⌷ [optional]
 
-- ◊. (single line)
-- ◊\◊\◊. (multiline)
-- r⟨glyph index⟩ (character)
-- F⟨numerator⟩.⟨denominator⟩. (fraction)
-- S⟨superscript⟩.⟨subscript⟩. (super- and subscript)
-- X◊. (box)
-- s0 (normal size)
-- s1024 (script size)
-- ! (negative thin space)
-- , (thin space)
-- \> (medium space)
-- ; (thick space)
-- c⟨0..15⟩ (set color)
+- ◊. *— single line*
+- ◊\◊\◊. *— multiline*
+- r⟨glyph index⟩ *— character*
+- F⟨numerator⟩.⟨denominator⟩. *— fraction*
+- ⌷S⟨superscript⟩.⟨subscript⟩. *— super- and subscript*
+- B⟨middle-delimiter count⟩⟨upper delimiter #0 glyph index⟩⟨lower delimiter #0 glyph index|-1⟩⟨upper delimiter #1 glyph index⟩⟨lower delimiter #1 glyph index|-1⟩…◊.◊.…◊. *— bracket*
+- X◊. *— box*
+- s0 *— normal size*
+- s1024 *— script size*
+- ! *— negative thin space*
+- , *— thin space*
+- \> *— medium space*
+- ; *— thick space*
+- c⟨0..15⟩ *— set color*
 
 #### Sample inputs ####
 
