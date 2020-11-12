@@ -154,9 +154,11 @@ size_t measure(size_t pstk_index) {
 			if (new_height > height) height = new_height;
 			if (new_depth > depth) depth = new_depth;
 		}
-		pstk_sizes[pstk_index].size.width = width;
-		pstk_sizes[pstk_index].size.height = height;
-		pstk_sizes[pstk_index].size.depth = depth;
+		pstk_sizes[pstk_index].size = (struct box_size) {
+			.width = width,
+			.height = height,
+			.depth = depth,
+		};
 		pstk_sizes[pstk_index].known = true;
 		pstk_index = j;
 	} else if (pstk[pstk_index].type == GLYPH) {
@@ -177,9 +179,11 @@ size_t measure(size_t pstk_index) {
 		height = pstk[pstk_index].param[3];
 		depth = pstk[pstk_index].param[3];
 	}
-	pstk_sizes[pstk_index].size.width = width;
-	pstk_sizes[pstk_index].size.height = height;
-	pstk_sizes[pstk_index].size.depth = depth;
+	pstk_sizes[pstk_index].size = (struct box_size) {
+		.width = width,
+		.height = height,
+		.depth = depth,
+	};
 	pstk_sizes[pstk_index].known = true;
 	return pstk_index;
 }
@@ -242,105 +246,99 @@ void draw(struct primitive *p) {
 		int x1 = p->param[0] + p->param[2];
 		int y0 = p->param[1] - p->param[3];
 		int y1 = p->param[1] + p->param[3];
-		int a = abs(x1-x0), b = abs(y1-y0), b1 = 0; /* values of diameter */
-		long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
-		long err = dx+dy+b1*a*a; /* error of 1.step */
+		int a = abs(x1 - x0), b = abs(y1 - y0); /* values of diameter */
+		int dx = 4 * (1 - a) * b * b;
+		int dy = 4 * a * a; /* error increment */
+		int err = dx + dy; /* error of 1.step */
 
-		if (x0 > x1) { x0 = x1; x1 += a; } /* if called with swapped points */
-		if (y0 > y1) y0 = y1; /* .. exchange them */
-		y0 += (b+1)/2; y1 = y0-b1;   /* starting pixel */
-		a *= 8*a; b1 = 8*b*b;
+		// if called with swapped points, exchange them
+		if (x0 > x1) { x0 = x1; x1 += a; }
+		if (y0 > y1) y0 = y1;
+		y0 += (b + 1) / 2;
+		y1 = y0;   /* starting pixel */
+		a *= 8 * a;
+		int b1 = 8 * b * b;
 
 		do {
-			vram[y0][x1] = p->param[4]; /*   I. Quadrant */
-			vram[y0][x0] = p->param[4]; /*  II. Quadrant */
-			vram[y1][x0] = p->param[4]; /* III. Quadrant */
-			vram[y1][x1] = p->param[4]; /*  IV. Quadrant */
+			vram[y0][x1] = p->param[4]; //   I. Quadrant
+			vram[y0][x0] = p->param[4]; //  II. Quadrant
+			vram[y1][x0] = p->param[4]; // III. Quadrant
+			vram[y1][x1] = p->param[4]; //  IV. Quadrant
 			if (err * 2 <= dy) { y0++; y1--; err += dy += a; }  /* y step */
 			if (err * 2 >= dx || err * 2 > dy) { x0++; x1--; err += dx += b1; } /* x step */
 		} while (x0 <= x1);
 
-		while (y0 - y1 < b) {  /* too early stop of flat ellipses a=1 */
-			vram[y0][x0-1] = p->param[4];
-			vram[y0][x1+1] = p->param[4];
-			vram[y1][x0-1] = p->param[4];
-			vram[y1][x1+1] = p->param[4];
+		// too early stop of flat ellipses a = 1
+		while (y0 - y1 < b) {
+			vram[y0][x0 - 1] = p->param[4];
+			vram[y0][x1 + 1] = p->param[4];
+			vram[y1][x0 - 1] = p->param[4];
+			vram[y1][x1 + 1] = p->param[4];
 			y0++; y1--;
 		}
 	}
 }
 
 void pstk_push_translation() {
-	pstk[pstk_count].type = TRANSLATE;
-	pstk[pstk_count].param[0] = 0;
-	pstk[pstk_count].param[1] = 0;
-	pstk[pstk_count].param[2] = 0;
-	pstk_count++;
+	pstk[pstk_count++] = (struct primitive) {
+		.type = TRANSLATE,
+		.param = {0, 0, 0, INT_MIN, INT_MIN},
+	};
 }
 
 void pstk_pop_translation() {
-	pstk[pstk_count].type = TRANSLATE;
-	pstk[pstk_count].param[0] = 0;
-	pstk[pstk_count].param[1] = 0;
-	pstk[pstk_count].param[2] = 1;
-	pstk_count++;
+	pstk[pstk_count++] = (struct primitive) {
+		.type = TRANSLATE,
+		.param = {0, 0, 1, INT_MIN, INT_MIN},
+	};
 }
 
 void pstk_add_box(int x, int y, int dx, int dy, int color) {
-	pstk[pstk_count].type = LINE;
-	pstk[pstk_count].param[0] = x;
-	pstk[pstk_count].param[1] = y;
-	pstk[pstk_count].param[2] = dx;
-	pstk[pstk_count].param[3] = 0;
-	pstk[pstk_count].param[4] = color;
-	pstk_count++;
-	pstk[pstk_count].type = LINE;
-	pstk[pstk_count].param[0] = x + dx;
-	pstk[pstk_count].param[1] = y;
-	pstk[pstk_count].param[2] = 0;
-	pstk[pstk_count].param[3] = dy;
-	pstk[pstk_count].param[4] = color;
-	pstk_count++;
-	pstk[pstk_count].type = LINE;
-	pstk[pstk_count].param[0] = x + dx;
-	pstk[pstk_count].param[1] = y + dy;
-	pstk[pstk_count].param[2] = -dx;
-	pstk[pstk_count].param[3] = 0;
-	pstk[pstk_count].param[4] = color;
-	pstk_count++;
-	pstk[pstk_count].type = LINE;
-	pstk[pstk_count].param[0] = x;
-	pstk[pstk_count].param[1] = y + dy;
-	pstk[pstk_count].param[2] = 0;
-	pstk[pstk_count].param[3] = -dy;
-	pstk[pstk_count].param[4] = color;
-	pstk_count++;
+	pstk[pstk_count++] = (struct primitive) {
+		.type = LINE,
+		.param = {x, y, dx, 0, color},
+	};
+	pstk[pstk_count++] = (struct primitive) {
+		.type = LINE,
+		.param = {x + dx, y, 0, dy, color},
+	};
+	pstk[pstk_count++] = (struct primitive) {
+		.type = LINE,
+		.param = {x + dx, y + dy, -dx, 0, color},
+	};
+	pstk[pstk_count++] = (struct primitive) {
+		.type = LINE,
+		.param = {x, y + dy, 0, -dy, color},
+	};
 }
 
 void pstk_add_delimiter(int x, int y, int dy, int glyph, int color) {
 	pstk_push_translation();
-	pstk[pstk_count].type = GLYPH;
-	pstk[pstk_count].param[0] = 0;
-	pstk[pstk_count].param[1] = glyphs[glyph].size.depth;
-	pstk[pstk_count].param[2] = glyph;
-	pstk[pstk_count].param[3] = 1;
-	pstk[pstk_count].param[4] = color;
-	pstk_count++;
-	pstk[pstk_count].type = GLYPH;
-	pstk[pstk_count].param[0] = 0;
-	pstk[pstk_count].param[1] = dy - glyphs[glyph].size.height;
-	pstk[pstk_count].param[2] = glyph;
-	pstk[pstk_count].param[3] = 2;
-	pstk[pstk_count].param[4] = color;
-	pstk_count++;
+	pstk[pstk_count++] = (struct primitive) {
+		.type = GLYPH,
+		.param = {0, glyphs[glyph].size.depth, glyph, 1, color},
+	};
+	pstk[pstk_count++] = (struct primitive) {
+		.type = GLYPH,
+		.param = {0, dy - glyphs[glyph].size.height, glyph, 2, color},
+	};
 	if (glyphs[glyph].delimiter_lower_x != INT_MIN && glyphs[glyph].delimiter_upper_x != INT_MIN) {
-		pstk[pstk_count].type = LINE;
-		pstk[pstk_count].param[0] = glyphs[glyph].delimiter_lower_x;
-		pstk[pstk_count].param[1] = pstk[pstk_count - 2].param[1] + glyphs[glyph].delimiter_lower_y;
-		pstk[pstk_count].param[2] = glyphs[glyph].delimiter_upper_x - pstk[pstk_count].param[0];
-		pstk[pstk_count].param[3] = pstk[pstk_count - 1].param[1] + glyphs[glyph].delimiter_upper_y - pstk[pstk_count].param[1];
-		pstk[pstk_count].param[4] = color;
-		pstk_count++;
+		pstk[pstk_count++] = (struct primitive) {
+			.type = LINE,
+			.param = {0, dy - glyphs[glyph].size.height, glyph, 2, color},
+		};
+		pstk[pstk_count++] = (struct primitive) {
+			.type = LINE,
+			.param = {
+				glyphs[glyph].delimiter_lower_x,
+				pstk[pstk_count - 2].param[1] + glyphs[glyph].delimiter_lower_y,
+				glyphs[glyph].delimiter_upper_x,
+				pstk[pstk_count - 1].param[1] + glyphs[glyph].delimiter_upper_y,
+				color,
+			},
+		};
+		pstk[pstk_count - 1].param[2] -= pstk[pstk_count - 1].param[0];
+		pstk[pstk_count - 1].param[3] -= pstk[pstk_count - 1].param[1];
 	}
 	pstk_pop_translation();
 	pstk[pstk_count - 1].param[0] = x;
@@ -374,13 +372,10 @@ void input(int glyph_base, int color) {
 		} else if (strchr("rbiz", op)) {
 			int glyph;
 			scanf("%d", &glyph);
-			pstk[pstk_count].type = GLYPH;
-			pstk[pstk_count].param[0] = x;
-			pstk[pstk_count].param[1] = 0;
-			pstk[pstk_count].param[2] = glyph_base + glyph;
-			pstk[pstk_count].param[3] = 3;
-			pstk[pstk_count].param[4] = color;
-			pstk_count++;
+			pstk[pstk_count++] = (struct primitive) {
+				.type = GLYPH,
+				.param = {x, 0, glyph_base + glyph, 3, color},
+			};
 			x += glyphs[glyph].size.width + 1;
 		} else if (op == 'F') {
 			size_t numerator = pstk_count;
@@ -399,13 +394,10 @@ void input(int glyph_base, int color) {
 			pstk[denominator - 1].param[1] = pstk_sizes[numerator].size.depth + 2;
 			pstk[pstk_count - 1].param[0] = x + (max_width - pstk_sizes[denominator].size.width) / 2 + 1;
 			pstk[pstk_count - 1].param[1] = -pstk_sizes[denominator].size.height - 1;
-			pstk[pstk_count].type = LINE;
-			pstk[pstk_count].param[0] = x;
-			pstk[pstk_count].param[1] = 0;
-			pstk[pstk_count].param[2] = max_width + 2;
-			pstk[pstk_count].param[3] = 0;
-			pstk[pstk_count].param[4] = color;
-			pstk_count++;
+			pstk[pstk_count++] = (struct primitive) {
+				.type = LINE,
+				.param = {x, 0, max_width + 2, 0, color},
+			};
 			x += max_width + 3;
 		} else if (op == 'S') {
 			int prev_height = 0;
@@ -520,8 +512,9 @@ int main(int argc, char *argv[]) {
 	input(0, 4);
 	pstk_pop_translation();
 	measure(0);
-	pstk[pstk_count - 1].param[0] = 19;
-	pstk[pstk_count - 1].param[1] = pstk_sizes[0].size.depth + 19;
+	int margin = 19;
+	pstk[pstk_count - 1].param[0] = margin;
+	pstk[pstk_count - 1].param[1] = pstk_sizes[0].size.depth + margin;
 	for (size_t i = 0; i < pstk_count; i++) {
 		if (pstk[i].type == TRANSLATE && pstk[i].param[2]) {
 			apply_translation(i);
@@ -532,7 +525,7 @@ int main(int argc, char *argv[]) {
 		draw(&pstk[i]);
 	}
 
-	int width = (pstk_sizes[0].size.width + 19 * 2) * 2, height = (pstk_sizes[0].size.height + pstk_sizes[0].size.depth + 19 * 2) * 2;
+	int width = (pstk_sizes[0].size.width + margin * 2) * 2, height = (pstk_sizes[0].size.height + pstk_sizes[0].size.depth + margin * 2) * 2;
 	uint8_t *image = calloc((width * height * 4 + 7) / 8, 1);
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {

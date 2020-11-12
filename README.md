@@ -26,7 +26,7 @@ SLZEE 2 reads the equation to be typeset from the standard input only.
 - ◊\◊\◊. *— multiline*
 - r⟨glyph index⟩ *— character*
 - F⟨numerator⟩.⟨denominator⟩. *— fraction*
-- ⌷S⟨superscript⟩.⟨subscript⟩. *— super- and subscript*
+- ⌷S[superscript].[subscript]. *— super- and subscript*
 - B⟨middle-delimiter count⟩⟨upper delimiter #0 glyph index⟩⟨lower delimiter #0 glyph index|-1⟩⟨upper delimiter #1 glyph index⟩⟨lower delimiter #1 glyph index|-1⟩…◊.◊.…◊. *— bracket*
 - X◊. *— box*
 - s0 *— normal size*
@@ -51,3 +51,5 @@ SLZEE 2 is released under the MIT License; see LICENSE.txt.
 The SLZEE 2 default font (slzee2-font.png) is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0).
 
 SLZEE 2 uses [LodePNG](https://lodev.org/lodepng/) (under the zlib License) for reading and writing images.
+
+The code for drawing lines and ellipses is adapted from [*The Beauty of Bresenham’s Algorithm*](http://members.chello.at/~easyfilter/bresenham.html).
