@@ -103,7 +103,19 @@ void load_glyphs() {
 	free(image);
 }
 
+void pstk_check_index(size_t pstk_index) {
+	if (pstk_index >= sizeof(pstk) / sizeof(pstk[0])) {
+		fprintf(stderr, "Error: too many primitives\n");
+		exit(4);
+	}
+	if (pstk_index >= pstk_count) {
+		fprintf(stderr, "Internal error: pstk index out of bound\n");
+		exit(1);
+	}
+}
+
 size_t pstk_match(size_t pstk_index) {
+	pstk_check_index(pstk_index);
 	if (pstk[pstk_index].type != TRANSLATE) {
 		fprintf(stderr, "Internal error: trying to match a non-translate\n");
 		exit(1);
@@ -130,6 +142,7 @@ size_t pstk_match(size_t pstk_index) {
 
 // returns the pstk index of the corresponding pop
 size_t measure(size_t pstk_index) {
+	pstk_check_index(pstk_index);
 	if (pstk_sizes[pstk_index].known) {
 		if (pstk[pstk_index].type == TRANSLATE && !pstk[pstk_index].param[2]) pstk_index = pstk_match(pstk_index);
 		return pstk_index;
@@ -189,6 +202,7 @@ size_t measure(size_t pstk_index) {
 }
 
 void apply_translation(size_t pstk_index) {
+	pstk_check_index(pstk_index);
 	if (pstk[pstk_index].type != TRANSLATE) {
 		fprintf(stderr, "Internal error: trying to measure a non-translate\n");
 		exit(1);
